@@ -137,7 +137,8 @@ foi={
     'nextclade_clade':'',
     'gisaid_accession':'',
     'county':'',
-    'collection_date':''
+    'collection_date':'',
+    'paui':''
 }
 noPassIds = []
 gatherfastas = []
@@ -356,6 +357,7 @@ task Extract {
 
     command <<<
         cut -f1 ~{samples_meta} | tail -n +2 > sample.ids
+        cut -f 1,8 ~{samples_meta} | tail -n +2 > name_and_paui.tsv
         matUtils extract -M ~{public_meta},~{samples_meta} -i ~{tree_pb} -j ~{prefix} -s sample.ids -N ~{treesize}
         # we can't have double slashes in URLs
         bucket=$(echo ~{public_json_bucket} | sed 's/\///')
@@ -365,8 +367,17 @@ task Extract {
         urlstart="~{nextstr}/${bucket}/${outdir}/"
 python3 - "$urlstart" <<CODE
 import sys
+import csv
 urlstart=sys.argv[1]
-with open('subtree-assignments.tsv', 'r') as f, open('samples_subtrees.html', 'w') as o:
+name_dict = dict()
+
+with open('name_and_paui.tsv', newline='') as csvfile:
+  tsvfile = csv.reader(csvfile, delimiter = '\t')
+  for rows in tsvfile:
+    name_dict[rows[0]] = rows[1]
+
+with open('subtree-assignments.tsv', 'r') as f, open('paui2url.tsv', 'wt') as out_file, open('samples_subtrees.html', 'w') as o:
+  tsv_writer = csv.writer(out_file, delimiter='\t')
   o.write('<html><body>')
   o.write('<table border=2 cellspacing=0 cellpadding=4>' + "\n")
   for line in f:
@@ -374,6 +385,10 @@ with open('subtree-assignments.tsv', 'r') as f, open('samples_subtrees.html', 'w
     if items[1].endswith('json'):
         o.write('<tr>' + "\n")
         items[1] = "<a href=\"{0}{1}?s={2}\">{1}</a>".format(urlstart, items[1].split('/')[-1], items[0].replace('|','%7C'))
+        urljson = items[1]
+        sample = items[0]
+        id = name_dict.get(sample, 'NONE')
+        tsv_writer.writerow([sample, id, urljson])
     else:
         o.write('<tr bgcolor="#FAD7A0">' + "\n")
     for item in items:
@@ -386,6 +401,8 @@ CODE
     output {
         File out_html = "samples_subtrees.html"
         File out_tsv = "subtree-assignments.tsv"
+        File specimen_mapped_to_paui = "name_and_paui.tsv"
+        File paui_mapped_to_tree = "paui2url.tsv"
         Array[File] subtree_jsons = glob("*subtree*")
         String bucket = read_string("resultbucket.txt")
     }
