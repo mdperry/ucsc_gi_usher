@@ -72,8 +72,8 @@ workflow usherPlaceNewSamples {
         File newProtobuf = usherAddSamples.new_tree
         File urltable = Extract.out_html
         File subtree_assignments = Extract.out_tsv
-	File name_and_paui Extract.specimen_mapped_to_paui
-        File paui2url Extract.paui_mapped_to_tree
+        File name_and_paui = Extract.specimen_mapped_to_paui
+        File paui2url = Extract.paui_mapped_to_tree
         String subtree_link = "http://storage.googleapis.com/" + Extract.bucket + "/samples_subtrees.html"
     }
     meta {
@@ -345,14 +345,14 @@ task mafft_align {
 task Extract {
     meta { description: "matUtils extracts all samples into (shared) subtrees; output table with metadata links to visualisation via nextstrain" }
     input {
-	File tree_pb
+	    File tree_pb
         File public_meta
         File samples_meta
         String prefix
         Int treesize
         String public_json_bucket
         Int num_threads = 32
-        Int mem_size = 128
+        Int mem_size = 140
         Int diskSizeGB = 10
     }
     String nextstr = "https://nextstrain.org/fetch/storage.googleapis.com"
@@ -372,6 +372,7 @@ import sys
 import csv
 urlstart=sys.argv[1]
 name_dict = dict()
+
 
 with open('name_and_paui.tsv', newline='') as csvfile:
   tsvfile = csv.reader(csvfile, delimiter = '\t')
@@ -413,6 +414,7 @@ CODE
         cpu: num_threads
         memory: mem_size +" GB"
         disks: "local-disk " + diskSizeGB + " SSD"
+        maxRetries: 2
     }   
 
 }
