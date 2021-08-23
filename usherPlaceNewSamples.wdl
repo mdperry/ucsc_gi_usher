@@ -72,8 +72,6 @@ workflow usherPlaceNewSamples {
         File newProtobuf = usherAddSamples.new_tree
         File urltable = Extract.out_html
         File subtree_assignments = Extract.out_tsv
-        File name_and_paui = Extract.specimen_mapped_to_paui
-        File paui2url = Extract.paui_mapped_to_tree
         String subtree_link = "http://storage.googleapis.com/" + Extract.bucket + "/samples_subtrees.html"
     }
     meta {
@@ -139,8 +137,7 @@ foi={
     'nextclade_clade':'',
     'gisaid_accession':'',
     'county':'',
-    'collection_date':'',
-    'paui':''
+    'collection_date':''
 }
 noPassIds = []
 gatherfastas = []
@@ -345,21 +342,20 @@ task mafft_align {
 task Extract {
     meta { description: "matUtils extracts all samples into (shared) subtrees; output table with metadata links to visualisation via nextstrain" }
     input {
-	    File tree_pb
+	File tree_pb
         File public_meta
         File samples_meta
         String prefix
         Int treesize
         String public_json_bucket
         Int num_threads = 32
-        Int mem_size = 140
+        Int mem_size = 128
         Int diskSizeGB = 10
     }
     String nextstr = "https://nextstrain.org/fetch/storage.googleapis.com"
 
     command <<<
         cut -f1 ~{samples_meta} | tail -n +2 > sample.ids
-        cut -f 1,8 ~{samples_meta} | tail -n +2 > name_and_paui.tsv
         matUtils extract -M ~{public_meta},~{samples_meta} -i ~{tree_pb} -j ~{prefix} -s sample.ids -N ~{treesize}
         # we can't have double slashes in URLs
         bucket=$(echo ~{public_json_bucket} | sed 's/\///')
@@ -369,18 +365,8 @@ task Extract {
         urlstart="~{nextstr}/${bucket}/${outdir}/"
 python3 - "$urlstart" <<CODE
 import sys
-import csv
 urlstart=sys.argv[1]
-name_dict = dict()
-
-
-with open('name_and_paui.tsv', newline='') as csvfile:
-  tsvfile = csv.reader(csvfile, delimiter = '\t')
-  for rows in tsvfile:
-    name_dict[rows[0]] = rows[1]
-
-with open('subtree-assignments.tsv', 'r') as f, open('paui2url.tsv', 'wt') as out_file, open('samples_subtrees.html', 'w') as o:
-  tsv_writer = csv.writer(out_file, delimiter='\t')
+with open('subtree-assignments.tsv', 'r') as f, open('samples_subtrees.html', 'w') as o:
   o.write('<html><body>')
   o.write('<table border=2 cellspacing=0 cellpadding=4>' + "\n")
   for line in f:
@@ -388,10 +374,6 @@ with open('subtree-assignments.tsv', 'r') as f, open('paui2url.tsv', 'wt') as ou
     if items[1].endswith('json'):
         o.write('<tr>' + "\n")
         items[1] = "<a href=\"{0}{1}?s={2}\">{1}</a>".format(urlstart, items[1].split('/')[-1], items[0].replace('|','%7C'))
-        urljson = items[1]
-        sample = items[0]
-        id = name_dict.get(sample, 'NONE')
-        tsv_writer.writerow([sample, id, urljson])
     else:
         o.write('<tr bgcolor="#FAD7A0">' + "\n")
     for item in items:
@@ -404,8 +386,6 @@ CODE
     output {
         File out_html = "samples_subtrees.html"
         File out_tsv = "subtree-assignments.tsv"
-        File specimen_mapped_to_paui = "name_and_paui.tsv"
-        File paui_mapped_to_tree = "paui2url.tsv"
         Array[File] subtree_jsons = glob("*subtree*")
         String bucket = read_string("resultbucket.txt")
     }
@@ -414,7 +394,6 @@ CODE
         cpu: num_threads
         memory: mem_size +" GB"
         disks: "local-disk " + diskSizeGB + " SSD"
-        maxRetries: 2
     }   
 
 }
